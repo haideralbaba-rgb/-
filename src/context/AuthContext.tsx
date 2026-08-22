@@ -13,15 +13,16 @@ interface AuthContextValue {
   isConfigured: boolean;
 
   // Auth
-  sendOtp: (phone: string) => Promise<{ error: string | null }>;
-  verifyOtp: (phone: string, token: string) => Promise<{ error: string | null }>;
+  register: (name: string, phone: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 
   // Profile
   updateName: (name: string) => Promise<void>;
 
   // Addresses
-  saveAddress: (addr: Omit<Address, "id" | "user_id" | "created_at">) => Promise<Address | null>;
+  saveAddress: (
+    addr: Omit<Address, "id" | "user_id" | "created_at">
+  ) => Promise<Address | null>;
   loadAddresses: () => Promise<void>;
 
   // Orders
@@ -59,7 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
     });
@@ -75,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOrders([]);
       return;
     }
+
     loadProfile();
     loadAddresses();
     loadOrders();
@@ -82,44 +86,109 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = async () => {
     if (!user) return;
-    const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
     if (data) setProfile(data as Profile);
   };
 
   const loadAddresses = useCallback(async () => {
     if (!user) return;
+
     const { data } = await supabase
       .from("addresses")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+
     if (data) setAddresses(data as Address[]);
   }, [user]);
 
   const loadOrders = useCallback(async () => {
     if (!user) return;
+
     const { data } = await supabase
       .from("orders")
       .select("*")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
+
     if (data) setOrders(data as Order[]);
   }, [user]);
 
-  const sendOtp = async (phone: string): Promise<{ error: string | null }> => {
-    if (!supabaseConfigured) return { error: "النظام غير مُهيّأ حالياً" };
-    const { error } = await supabase.auth.signInWithOtp({ phone });
-    return { error: error?.message ?? null };
-  };
+  // ============================================================
+  // تسجيل تجريبي بدون SMS / OTP
+  // ============================================================
+  const register = async (
+    name: string,
+    phone: string
+  ): Promise<{ error: string | null }> => {
+    if (!supabaseConfigured) {
+      return { error: "النظام غير مُهيّأ حالياً" };
+    }
 
-  const verifyOtp = async (phone: string, token: string): Promise<{ error: string | null }> => {
-    if (!supabaseConfigured) return { error: "النظام غير مُهيّأ حالياً" };
-    const { error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
-    return { error: error?.message ?? null };
+    const cleanName = name.trim();
+    const cleanPhone = phone.trim();
+
+    if (!cleanName) {
+      return { error: "اكتب اسمك عيوني" };
+    }
+
+    if (!cleanPhone) {
+      return { error: "اكتب رقم هاتفك" };
+    }
+
+    try {
+      // إذا كان الزبون عنده جلسة مسبقًا، لا ننشئ مستخدمًا جديدًا
+      let currentUser = user;
+
+      // إنشاء مستخدم مجهول لأول مرة
+      if (!currentUser) {
+        const { data, error } = await supabase.auth.signInAnonymously();
+
+        if (error) {
+          return { error: error.message };
+        }
+
+        currentUser = data.user;
+
+        if (!currentUser) {
+          return { error: "تعذر إنشاء حساب الزبون" };
+        }
+      }
+
+      // تحديث بيانات profile
+      const { data: updatedProfile, error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          name: cleanName,
+          phone: cleanPhone,
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq("id", currentUser.id)
+        .select()
+        .single();
+
+      if (profileError) {
+        return { error: profileError.message };
+      }
+
+      setUser(currentUser);
+      setProfile(updatedProfile as Profile);
+
+      return { error: null };
+    } catch {
+      return { error: "صار خطأ أثناء التسجيل، حاول مرة ثانية" };
+    }
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
+
     setUser(null);
     setSession(null);
     setProfile(null);
@@ -129,7 +198,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateName = async (name: string) => {
     if (!user) return;
-    await supabase.from("profiles").update({ name } as never).eq("id", user.id);
+
+    await supabase
+      .from("profiles")
+      .update({ name } as never)
+      .eq("id", user.id);
+
     setProfile((p) => (p ? { ...p, name } : p));
   };
 
@@ -137,14 +211,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     addr: Omit<Address, "id" | "user_id" | "created_at">
   ): Promise<Address | null> => {
     if (!user) return null;
+
     const { data, error } = await supabase
       .from("addresses")
       .insert({ ...addr, user_id: user.id } as never)
       .select()
       .single();
+
     if (error || !data) return null;
+
     const newAddr = data as Address;
+
     setAddresses((prev) => [newAddr, ...prev]);
+
     return newAddr;
   };
 
@@ -158,13 +237,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orders,
         loading,
         isConfigured: supabaseConfigured,
-        sendOtp,
-        verifyOtp,
+
+        register,
         signOut,
+
         updateName,
+
         saveAddress,
         loadAddresses,
         loadOrders,
+
         showLogin,
         setShowLogin,
         loginRedirectTo,
@@ -178,6 +260,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+
+  if (!ctx) {
+    throw new Error("useAuth must be used within AuthProvider");
+  }
+
   return ctx;
 }
