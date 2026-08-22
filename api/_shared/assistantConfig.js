@@ -21,7 +21,7 @@ export const SYSTEM_PROMPT = `أنت "أبو علي"، الوكيل الذكي �
 4. امتصاص غضب الزبون المشتكي بالاعتذار واقتراح تعويض.
 5. لا تخترع أسعاراً، لا تتحدث بالفصحى، ولا تطل في الإجابة.`;
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
