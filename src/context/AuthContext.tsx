@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+
 import { supabase, supabaseConfigured } from "../lib/supabase";
 import type { Profile, Address, Order } from "../lib/database.types";
 import type { User, Session } from "@supabase/supabase-js";
@@ -6,14 +14,22 @@ import type { User, Session } from "@supabase/supabase-js";
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
+
+  // Customer data
   profile: Profile | null;
+
   addresses: Address[];
   orders: Order[];
+
   loading: boolean;
   isConfigured: boolean;
 
   // Auth
-  register: (name: string, phone: string) => Promise<{ error: string | null }>;
+  register: (
+    name: string,
+    phone: string
+  ) => Promise<{ error: string | null }>;
+
   signOut: () => Promise<void>;
 
   // Profile
@@ -23,6 +39,7 @@ interface AuthContextValue {
   saveAddress: (
     addr: Omit<Address, "id" | "user_id" | "created_at">
   ) => Promise<Address | null>;
+
   loadAddresses: () => Promise<void>;
 
   // Orders
@@ -31,23 +48,39 @@ interface AuthContextValue {
   // Login modal
   showLogin: boolean;
   setShowLogin: (v: boolean) => void;
+
   loginRedirectTo: string | null;
   setLoginRedirectTo: (v: string | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showLogin, setShowLogin] = useState(false);
-  const [loginRedirectTo, setLoginRedirectTo] = useState<string | null>(null);
 
-  // Initialize session
+  const [session, setSession] = useState<Session | null>(null);
+
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  const [addresses, setAddresses] = useState<Address[]>([]);
+
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  const [loading, setLoading] = useState(true);
+
+  const [showLogin, setShowLogin] = useState(false);
+
+  const [loginRedirectTo, setLoginRedirectTo] =
+    useState<string | null>(null);
+
+  // ============================================================
+  // INITIALIZE SESSION
+  // ============================================================
+
   useEffect(() => {
     if (!supabaseConfigured) {
       setLoading(false);
@@ -67,10 +100,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(s?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Load profile when user changes
+  // ============================================================
+  // LOAD CUSTOMER DATA WHEN USER CHANGES
+  // ============================================================
+
   useEffect(() => {
     if (!user || !supabaseConfigured) {
       setProfile(null);
@@ -79,112 +117,144 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    loadProfile();
+    loadCustomer();
     loadAddresses();
     loadOrders();
   }, [user]);
 
-  const loadProfile = async () => {
+  // ============================================================
+  // LOAD CUSTOMER FROM customers TABLE
+  // ============================================================
+
+  const loadCustomer = async () => {
     if (!user) return;
 
-    const { data } = await supabase
-      .from("profiles")
+    const { data, error } = await supabase
+      .from("customers")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (data) setProfile(data as Profile);
+    if (!error && data) {
+      setProfile(data as Profile);
+    }
   };
 
-  const loadAddresses = useCallback(async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("addresses")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (data) setAddresses(data as Address[]);
-  }, [user]);
-
-  const loadOrders = useCallback(async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (data) setOrders(data as Order[]);
-  }, [user]);
-
   // ============================================================
-  // تسجيل تجريبي بدون SMS / OTP
+  // REGISTER
+  // NAME + PHONE
+  // NO SMS
+  // NO OTP
   // ============================================================
+
   const register = async (
     name: string,
     phone: string
   ): Promise<{ error: string | null }> => {
     if (!supabaseConfigured) {
-      return { error: "النظام غير مُهيّأ حالياً" };
+      return {
+        error: "النظام غير مُهيّأ حالياً",
+      };
     }
 
     const cleanName = name.trim();
     const cleanPhone = phone.trim();
 
-    if (!cleanName) {
-      return { error: "اكتب اسمك عيوني" };
+    if (cleanName.length < 2) {
+      return {
+        error: "اكتب اسمك عيوني",
+      };
     }
 
-    if (!cleanPhone) {
-      return { error: "اكتب رقم هاتفك" };
+    if (cleanPhone.length < 10) {
+      return {
+        error: "لازم تدخل رقم هاتف صحيح",
+      };
     }
 
     try {
-      // إذا كان الزبون عنده جلسة مسبقًا، لا ننشئ مستخدمًا جديدًا
+      // --------------------------------------------------------
+      // 1. Get current user/session
+      // --------------------------------------------------------
+
       let currentUser = user;
 
-      // إنشاء مستخدم مجهول لأول مرة
+      // --------------------------------------------------------
+      // 2. Create anonymous user if there is no session
+      // --------------------------------------------------------
+
       if (!currentUser) {
-        const { data, error } = await supabase.auth.signInAnonymously();
+        const {
+          data,
+          error,
+        } = await supabase.auth.signInAnonymously();
 
         if (error) {
-          return { error: error.message };
+          return {
+            error: error.message,
+          };
         }
 
         currentUser = data.user;
 
         if (!currentUser) {
-          return { error: "تعذر إنشاء حساب الزبون" };
+          return {
+            error: "تعذر إنشاء حساب الزبون",
+          };
         }
       }
 
-      // تحديث بيانات profile
-      const { data: updatedProfile, error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          name: cleanName,
-          phone: cleanPhone,
-          updated_at: new Date().toISOString(),
-        } as never)
-        .eq("id", currentUser.id)
+      // --------------------------------------------------------
+      // 3. Save customer
+      // --------------------------------------------------------
+
+      const {
+        data: customer,
+        error: customerError,
+      } = await supabase
+        .from("customers")
+        .upsert(
+          {
+            id: currentUser.id,
+            name: cleanName,
+            phone: cleanPhone,
+          },
+          {
+            onConflict: "id",
+          }
+        )
         .select()
         .single();
 
-      if (profileError) {
-        return { error: profileError.message };
+      if (customerError) {
+        return {
+          error: customerError.message,
+        };
       }
 
-      setUser(currentUser);
-      setProfile(updatedProfile as Profile);
+      // --------------------------------------------------------
+      // 4. Update local state
+      // --------------------------------------------------------
 
-      return { error: null };
-    } catch {
-      return { error: "صار خطأ أثناء التسجيل، حاول مرة ثانية" };
+      setUser(currentUser);
+
+      setProfile(customer as Profile);
+
+      return {
+        error: null,
+      };
+    } catch (error) {
+      console.error("Customer registration error:", error);
+
+      return {
+        error: "صار خطأ أثناء التسجيل، حاول مرة ثانية",
+      };
     }
   };
+
+  // ============================================================
+  // SIGN OUT
+  // ============================================================
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -196,45 +266,129 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setOrders([]);
   };
 
+  // ============================================================
+  // UPDATE CUSTOMER NAME
+  // ============================================================
+
   const updateName = async (name: string) => {
     if (!user) return;
 
-    await supabase
-      .from("profiles")
-      .update({ name } as never)
+    const cleanName = name.trim();
+
+    if (!cleanName) return;
+
+    const { error } = await supabase
+      .from("customers")
+      .update({
+        name: cleanName,
+      })
       .eq("id", user.id);
 
-    setProfile((p) => (p ? { ...p, name } : p));
+    if (error) {
+      console.error("Update customer name error:", error);
+      return;
+    }
+
+    setProfile((current) =>
+      current
+        ? {
+            ...current,
+            name: cleanName,
+          }
+        : current
+    );
   };
+
+  // ============================================================
+  // ADDRESSES
+  // ============================================================
+
+  const loadAddresses = useCallback(async () => {
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("addresses")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (!error && data) {
+      setAddresses(data as Address[]);
+    }
+  }, [user]);
 
   const saveAddress = async (
     addr: Omit<Address, "id" | "user_id" | "created_at">
   ): Promise<Address | null> => {
     if (!user) return null;
 
-    const { data, error } = await supabase
+    const {
+      data,
+      error,
+    } = await supabase
       .from("addresses")
-      .insert({ ...addr, user_id: user.id } as never)
+      .insert({
+        ...addr,
+        user_id: user.id,
+      })
       .select()
       .single();
 
-    if (error || !data) return null;
+    if (error || !data) {
+      console.error("Save address error:", error);
+      return null;
+    }
 
-    const newAddr = data as Address;
+    const newAddress = data as Address;
 
-    setAddresses((prev) => [newAddr, ...prev]);
+    setAddresses((previous) => [
+      newAddress,
+      ...previous,
+    ]);
 
-    return newAddr;
+    return newAddress;
   };
+
+  // ============================================================
+  // ORDERS
+  // ============================================================
+
+  const loadOrders = useCallback(async () => {
+    if (!user) return;
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (!error && data) {
+      setOrders(data as Order[]);
+    }
+  }, [user]);
+
+  // ============================================================
+  // PROVIDER
+  // ============================================================
 
   return (
     <AuthContext.Provider
       value={{
         user,
         session,
+
         profile,
+
         addresses,
         orders,
+
         loading,
         isConfigured: supabaseConfigured,
 
@@ -245,10 +399,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         saveAddress,
         loadAddresses,
+
         loadOrders,
 
         showLogin,
         setShowLogin,
+
         loginRedirectTo,
         setLoginRedirectTo,
       }}
@@ -258,11 +414,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// ============================================================
+// USE AUTH
+// ============================================================
+
 export function useAuth() {
   const ctx = useContext(AuthContext);
 
   if (!ctx) {
-    throw new Error("useAuth must be used within AuthProvider");
+    throw new Error(
+      "useAuth must be used within AuthProvider"
+    );
   }
 
   return ctx;
