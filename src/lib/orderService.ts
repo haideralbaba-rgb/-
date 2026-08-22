@@ -2,6 +2,21 @@ import { supabase, supabaseConfigured } from "./supabase";
 import type { CartItem } from "../context/OrderContext";
 import type { Order } from "./database.types";
 
+// ============================================================
+// CUSTOMER
+// ============================================================
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  created_at: string;
+}
+
+// ============================================================
+// CREATE ORDER INPUT
+// ============================================================
+
 export interface CreateOrderInput {
   customerId: string;
 
@@ -24,6 +39,10 @@ export interface CreateOrderInput {
   paymentMethod?: "cash" | "online";
 }
 
+// ============================================================
+// CREATE ORDER RESULT
+// ============================================================
+
 export interface CreateOrderResult {
   success: boolean;
   order?: Order;
@@ -31,14 +50,131 @@ export interface CreateOrderResult {
   error?: string;
 }
 
+// ============================================================
+// GENERATE ORDER NUMBER
+// ============================================================
+
 function generateOrderNumber() {
   const now = Date.now().toString().slice(-6);
   return `MS-${now}`;
 }
 
+// ============================================================
+// GET OR CREATE CUSTOMER
+// ============================================================
+
+export async function getOrCreateCustomer(
+  name: string,
+  phone: string
+): Promise<{ customer: Customer | null; error?: string }> {
+  if (!supabaseConfigured) {
+    return {
+      customer: null,
+      error: "النظام غير مُهيّأ حالياً",
+    };
+  }
+
+  try {
+    // ----------------------------------------------------------
+    // البحث عن الزبون بواسطة رقم الهاتف
+    // ----------------------------------------------------------
+
+    const { data: existingCustomer, error: searchError } =
+      await supabase
+        .from("customers")
+        .select("*")
+        .eq("phone", phone)
+        .maybeSingle();
+
+    if (searchError) {
+      console.error("Customer search error:", searchError);
+
+      return {
+        customer: null,
+        error: "ما گدرنا نبحث عن بيانات الزبون",
+      };
+    }
+
+    // ----------------------------------------------------------
+    // الزبون موجود مسبقاً
+    // ----------------------------------------------------------
+
+    if (existingCustomer) {
+      // إذا الاسم تغير، نحدثه
+      if (name && existingCustomer.name !== name) {
+        const {
+          data: updatedCustomer,
+          error: updateError,
+        } = await supabase
+          .from("customers")
+          .update({ name })
+          .eq("id", existingCustomer.id)
+          .select()
+          .single();
+
+        if (!updateError && updatedCustomer) {
+          return {
+            customer: updatedCustomer as Customer,
+          };
+        }
+      }
+
+      return {
+        customer: existingCustomer as Customer,
+      };
+    }
+
+    // ----------------------------------------------------------
+    // الزبون جديد
+    // ----------------------------------------------------------
+
+    const {
+      data: newCustomer,
+      error: createError,
+    } = await supabase
+      .from("customers")
+      .insert({
+        name,
+        phone,
+      })
+      .select()
+      .single();
+
+    if (createError || !newCustomer) {
+      console.error("Customer create error:", createError);
+
+      return {
+        customer: null,
+        error:
+          createError?.message ||
+          "ما گدرنا نسجل الزبون",
+      };
+    }
+
+    return {
+      customer: newCustomer as Customer,
+    };
+  } catch (error) {
+    console.error("Customer error:", error);
+
+    return {
+      customer: null,
+      error: "حدث خطأ أثناء حفظ بيانات الزبون",
+    };
+  }
+}
+
+// ============================================================
+// CREATE ORDER
+// ============================================================
+
 export async function createOrder(
   input: CreateOrderInput
 ): Promise<CreateOrderResult> {
+  // ----------------------------------------------------------
+  // التحقق من العميل
+  // ----------------------------------------------------------
+
   if (!input.customerId) {
     return {
       success: false,
@@ -46,12 +182,20 @@ export async function createOrder(
     };
   }
 
+  // ----------------------------------------------------------
+  // التحقق من السلة
+  // ----------------------------------------------------------
+
   if (!input.items || input.items.length === 0) {
     return {
       success: false,
       error: "السلة فارغة",
     };
   }
+
+  // ----------------------------------------------------------
+  // التحقق من Supabase
+  // ----------------------------------------------------------
 
   if (!supabaseConfigured) {
     return {
@@ -61,17 +205,20 @@ export async function createOrder(
   }
 
   try {
-    // ============================================================
+    // ========================================================
     // 1. إنشاء رقم الطلب
-    // ============================================================
+    // ========================================================
 
     const orderNumber = generateOrderNumber();
 
-    // ============================================================
-    // 2. إنشاء الطلب
-    // ============================================================
+    // ========================================================
+    // 2. إنشاء الطلب الرئيسي
+    // ========================================================
 
-    const { data: order, error: orderError } = await supabase
+    const {
+      data: order,
+      error: orderError,
+    } = await supabase
       .from("orders")
       .insert({
         order_number: orderNumber,
@@ -81,27 +228,42 @@ export async function createOrder(
         status: "pending",
 
         subtotal: input.subtotal,
+
         delivery_fee: input.deliveryFee,
+
         total: input.total,
 
         fulfillment: input.fulfillment,
 
         latitude: input.latitude ?? null,
+
         longitude: input.longitude ?? null,
-        formatted_address: input.formattedAddress ?? null,
+
+        formatted_address:
+          input.formattedAddress ?? null,
 
         phone: input.phone,
-        customer_name: input.customerName ?? null,
+
+        customer_name:
+          input.customerName ?? null,
 
         notes: input.notes ?? null,
 
-        payment_method: input.paymentMethod ?? "cash",
+        payment_method:
+          input.paymentMethod ?? "cash",
       } as never)
       .select()
       .single();
 
+    // ========================================================
+    // فشل إنشاء الطلب
+    // ========================================================
+
     if (orderError || !order) {
-      console.error("Create order error:", orderError);
+      console.error(
+        "Create order error:",
+        orderError
+      );
 
       return {
         success: false,
@@ -113,9 +275,9 @@ export async function createOrder(
 
     const typedOrder = order as Order;
 
-    // ============================================================
-    // 3. تجهيز عناصر الطلب
-    // ============================================================
+    // ========================================================
+    // 3. تجهيز تفاصيل الطلب
+    // ========================================================
 
     const orderItems = input.items.map((item) => ({
       order_id: typedOrder.id,
@@ -130,14 +292,12 @@ export async function createOrder(
 
       total: item.price * item.quantity,
 
-      // حاليًا ما زلنا نجهز النظام للإضافات
-      // لاحقًا نضع Extras الحقيقية هنا
       extras: [],
     }));
 
-    // ============================================================
-    // 4. حفظ عناصر الطلب
-    // ============================================================
+    // ========================================================
+    // 4. حفظ تفاصيل الطلب
+    // ========================================================
 
     const {
       error: itemsError,
@@ -145,13 +305,17 @@ export async function createOrder(
       .from("order_items")
       .insert(orderItems as never);
 
+    // ========================================================
+    // فشل حفظ التفاصيل
+    // ========================================================
+
     if (itemsError) {
       console.error(
         "Create order items error:",
         itemsError
       );
 
-      // إذا فشل حفظ العناصر، نحذف الطلب الأساسي
+      // حذف الطلب الأساسي حتى لا يبقى طلب ناقص
       await supabase
         .from("orders")
         .delete()
@@ -163,21 +327,44 @@ export async function createOrder(
       };
     }
 
-    // ============================================================
-    // 5. نجاح
-    // ============================================================
+    // ========================================================
+    // 5. الطلب تم بنجاح
+    // ========================================================
 
     return {
       success: true,
+
       order: typedOrder,
-      orderNumber: typedOrder.order_number,
+
+      orderNumber:
+        typedOrder.order_number,
     };
   } catch (error) {
-    console.error("Unexpected order error:", error);
+    console.error(
+      "Unexpected order error:",
+      error
+    );
 
     return {
       success: false,
-      error: "حدث خطأ غير متوقع أثناء إنشاء الطلب",
+      error:
+        "حدث خطأ غير متوقع أثناء إنشاء الطلب",
     };
+  }
+}
+
+// ============================================================
+// GET LOCAL ORDERS
+// ============================================================
+
+export function getLocalOrders(): (
+  Order & { items?: unknown[] }
+)[] {
+  try {
+    return JSON.parse(
+      localStorage.getItem("ms_orders") || "[]"
+    );
+  } catch {
+    return [];
   }
 }
