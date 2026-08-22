@@ -1,8 +1,5 @@
 // ============================================================
-// إعدادات مشتركة لوكيل الذكاء الاصطناعي "أبو علي"
-// يُستخدم هذا الملف من قبل كل من:
-//   - api/chat.js          (Vercel Serverless Function)
-//   - server/index.js      (Express server للاستضافة الذاتية)
+// إعدادات مشتركة لوكيل الذكاء الاصطناعي "أبو علي" (محدث لـ Google Gemini)
 // ============================================================
 
 export const SYSTEM_PROMPT = `أنت "أبو علي"، الوكيل الذكي لمطعم "معلم الشاورما" في كربلاء المقدسة (مول الحارث).
@@ -23,17 +20,24 @@ export const SYSTEM_PROMPT = `أنت "أبو علي"، الوكيل الذكي �
 4. امتصاص غضب الزبون المشتكي بالاعتذار واقتراح تعويض.
 5. لا تخترع أسعاراً، لا تتحدث بالفصحى، ولا تطل في الإجابة.`;
 
+// استخدام نموذج gemini-1.5-flash لسرعته الفائقة ودقته العالية في المحادثات
 const GEMINI_MODEL = "gemini-1.5-flash";
 
+/**
+ * يرسل محادثة كاملة إلى Google Gemini ويعيد نص الرد.
+ * @param {{role: 'user'|'assistant', text: string}[]} history
+ * @returns {Promise<{ text?: string, error?: string, status?: number }>}
+ */
 export async function callYandexGPT(history) {
-  const apiKey = process.env.API_KEY;
+  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    return { error: "لم يتم إعداد مفتاح API على الخادم (API_KEY مفقود).", status: 500 };
+    return { error: "لم يتم إعداد مفتاح API على الخادم (API_KEY أو GEMINI_API_KEY مفقود).", status: 500 };
   }
 
   const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
+  // تحويل شكل المحادثة لتتطابق مع هيكل طلبات Gemini
   const contents = [
     {
       role: "user",
@@ -63,7 +67,7 @@ export async function callYandexGPT(history) {
     const data = await res.json();
 
     if (!res.ok) {
-      const message = data?.error?.message || "فشل الاتصال بخدمة الذكاء الاصطناعي.";
+      const message = data?.error?.message || "فشل الاتصال بخدمة الذكاء الاصطناعي (Gemini).";
       return { error: message, status: res.status };
     }
 
@@ -77,62 +81,3 @@ export async function callYandexGPT(history) {
     return { error: "تعذر الوصول إلى خدمة الذكاء الاصطناعي.", status: 502 };
   }
 }
-
-  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    return { error: "لم يتم إعداد مفتاح API على الخادم (API_KEY مفقود).", status: 500 };
-  }
-
-  if (!apiKey) {
-    return { error: "لم يتم إعداد مفتاح API على الخادم (API_KEY مفقود).", status: 500 };
-  }
-  if (!folderId) {
-    return {
-      error: "لم يتم إعداد YANDEX_FOLDER_ID على الخادم. راجع ملف .env وأضف معرّف المجلد من Yandex Cloud.",
-      status: 500,
-    };
-  }
-
-  const messages = [
-    { role: "system", text: SYSTEM_PROMPT },
-    ...history.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", text: m.text })),
-  ];
-
-  try {
-    const res = await fetch(YANDEX_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Api-Key ${apiKey}`,
-        "x-folder-id": folderId,
-      },
-      body: JSON.stringify({
-        modelUri: `gpt://${folderId}/${model}`,
-        completionOptions: {
-          stream: false,
-          temperature: 0.6,
-          maxTokens: "400",
-        },
-        messages,
-      }),
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      const message = data?.error?.message || data?.message || "فشل الاتصال بخدمة الذكاء الاصطناعي.";
-      return { error: message, status: res.status };
-    }
-
-    const text = data?.result?.alternatives?.[0]?.message?.text;
-    if (!text) {
-      return { error: "لم يصل رد من الخدمة.", status: 502 };
-    }
-
-    return { text };
-  } catch (err) {
-    return { error: "تعذر الوصول إلى خدمة الذكاء الاصطناعي.", status: 502 };
-  }
-}
-
