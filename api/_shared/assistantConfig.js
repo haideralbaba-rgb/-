@@ -1,6 +1,6 @@
 // ============================================================
 // إعدادات مشتركة لوكيل الذكاء الاصطناعي "أبو علي"
-// يعمل مع Google Gemini API
+// Google Gemini
 // ============================================================
 
 export const SYSTEM_PROMPT = `أنت "أبو علي"، الوكيل الذكي لمطعم "معلم الشاورما" في كربلاء المقدسة (مول الحارث).
@@ -21,14 +21,14 @@ export const SYSTEM_PROMPT = `أنت "أبو علي"، الوكيل الذكي �
 4. امتصاص غضب الزبون المشتكي بالاعتذار واقتراح تعويض.
 5. لا تخترع أسعاراً، لا تتحدث بالفصحى، ولا تطل في الإجابة.`;
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+const GEMINI_MODEL =
+  process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const GEMINI_ENDPOINT =
+  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 /**
- * يرسل محادثة كاملة إلى Google Gemini ويعيد نص الرد.
- * @param {{role: 'user'|'assistant', text: string}[]} history
- * @returns {Promise<{ text?: string, error?: string, status?: number }>}
+ * إرسال المحادثة إلى Google Gemini
  */
 export async function callGemini(history) {
   const apiKey = process.env.API_KEY;
@@ -52,9 +52,11 @@ export async function callGemini(history) {
   try {
     const res = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json",
       },
+
       body: JSON.stringify({
         systemInstruction: {
           parts: [
@@ -67,7 +69,6 @@ export async function callGemini(history) {
         contents,
 
         generationConfig: {
-          temperature: 0.6,
           maxOutputTokens: 400,
         },
       }),
@@ -80,6 +81,8 @@ export async function callGemini(history) {
         data?.error?.message ||
         data?.message ||
         "فشل الاتصال بخدمة Gemini.";
+
+      console.error("Gemini API Error:", data);
 
       return {
         error: message,
@@ -103,7 +106,10 @@ export async function callGemini(history) {
     return {
       text,
     };
+
   } catch (err) {
+    console.error("Gemini Connection Error:", err);
+
     return {
       error: "تعذر الوصول إلى خدمة الذكاء الاصطناعي.",
       status: 502,
