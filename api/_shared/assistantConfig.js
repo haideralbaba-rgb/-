@@ -31,9 +31,11 @@ const YANDEX_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/co
  * @returns {Promise<{ text?: string, error?: string, status?: number }>}
  */
 export async function callYandexGPT(history) {
-  const apiKey = process.env.API_KEY;
-  const folderId = process.env.YANDEX_FOLDER_ID;
-  const model = process.env.YANDEX_MODEL || "yandexgpt";
+  const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return { error: "لم يتم إعداد مفتاح API على الخادم (API_KEY مفقود).", status: 500 };
+  }
 
   if (!apiKey) {
     return { error: "لم يتم إعداد مفتاح API على الخادم (API_KEY مفقود).", status: 500 };
