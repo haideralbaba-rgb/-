@@ -20,11 +20,11 @@ export const SYSTEM_PROMPT = `أنت "أبو علي"، الوكيل الذكي �
 4. امتصاص غضب الزبون المشتكي بالاعتذار واقتراح تعويض.
 5. لا تخترع أسعاراً، لا تتحدث بالفصحى، ولا تطل في الإجابة.`;
 
-// استخدام نموذج gemini-1.5-flash لسرعته الفائقة ودقته العالية في المحادثات
 const GEMINI_MODEL = "gemini-1.5-flash";
 
 /**
  * يرسل محادثة كاملة إلى Google Gemini ويعيد نص الرد.
+ * (تم إبقاء اسم الدالة callYandexGPT ليتوافق مع باقي ملفات المشروع)
  * @param {{role: 'user'|'assistant', text: string}[]} history
  * @returns {Promise<{ text?: string, error?: string, status?: number }>}
  */
@@ -37,7 +37,6 @@ export async function callYandexGPT(history) {
 
   const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
 
-  // تحويل شكل المحادثة لتتطابق مع هيكل طلبات Gemini
   const contents = [
     {
       role: "user",
@@ -67,7 +66,7 @@ export async function callYandexGPT(history) {
     const data = await res.json();
 
     if (!res.ok) {
-      const message = data?.error?.message || "فشل الاتصال بخدمة الذكاء الاصطناعي (Gemini).";
+      const message = data?.error?.message || "فشل الاتصال بخدمة الذكاء الاصطناعي.";
       return { error: message, status: res.status };
     }
 
