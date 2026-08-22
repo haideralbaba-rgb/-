@@ -23,14 +23,61 @@ export const SYSTEM_PROMPT = `أنت "أبو علي"، الوكيل الذكي �
 4. امتصاص غضب الزبون المشتكي بالاعتذار واقتراح تعويض.
 5. لا تخترع أسعاراً، لا تتحدث بالفصحى، ولا تطل في الإجابة.`;
 
-const YANDEX_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion";
+const GEMINI_MODEL = "gemini-1.5-flash";
 
-/**
- * يرسل محادثة كاملة إلى YandexGPT ويعيد نص الرد.
- * @param {{role: 'user'|'assistant', text: string}[]} history
- * @returns {Promise<{ text?: string, error?: string, status?: number }>}
- */
 export async function callYandexGPT(history) {
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey) {
+    return { error: "لم يتم إعداد مفتاح API على الخادم (API_KEY مفقود).", status: 500 };
+  }
+
+  const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+
+  const contents = [
+    {
+      role: "user",
+      parts: [{ text: `[تعليمات النظام الأساسية - التزم بها تماماً]:\n${SYSTEM_PROMPT}` }]
+    },
+    ...history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.text }],
+    })),
+  ];
+
+  try {
+    const res = await fetch(GEMINI_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          temperature: 0.6,
+          maxOutputTokens: 400,
+        },
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      const message = data?.error?.message || "فشل الاتصال بخدمة الذكاء الاصطناعي.";
+      return { error: message, status: res.status };
+    }
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) {
+      return { error: "لم يصل رد من الخدمة.", status: 502 };
+    }
+
+    return { text };
+  } catch (err) {
+    return { error: "تعذر الوصول إلى خدمة الذكاء الاصطناعي.", status: 502 };
+  }
+}
+
   const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
