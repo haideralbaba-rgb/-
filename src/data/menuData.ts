@@ -27,6 +27,18 @@ export interface MenuCategory {
 let _uid = 0;
 const uid = (base: string) => `${base}-${++_uid}`;
 
+// Until individual professional photos are supplied for every SKU, use the
+// closest existing restaurant photograph automatically. This guarantees that
+// every menu card has a real image instead of an empty/placeholder block.
+function imageFor(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("برغر") || n.includes("برجر")) return "/images/burger-deluxe.jpg";
+  if (n.includes("شاورما دجاج") || n.includes("دجاج")) return "/images/shawarma-chicken.jpg";
+  if (n.includes("شاورما لحم") || n.includes("لحم") || n.includes("كباب")) return "/images/shawarma-meat.jpg";
+  if (n.includes("بروستد") || n.includes("فنكر") || n.includes("فرايز") || n.includes("بطاطا") || n.includes("موزريلا") || n.includes("بصل")) return "/images/broasted-chicken.jpg";
+  return "/images/food/plating-macro.jpg";
+}
+
 function makeItems(
   raw: {
     name: string;
@@ -36,6 +48,7 @@ function makeItems(
     tag?: string;
     popular?: boolean;
     desc?: string;
+    image?: string;
   }[]
 ): MenuItem[] {
   return raw.map((r) => {
@@ -45,6 +58,7 @@ function makeItems(
         .replace(/\s+/g, "-")
         .replace(/[^\u0600-\u06FFa-zA-Z0-9-]/g, "")
     );
+    const image = r.image ?? imageFor(r.name);
     if (r.sandwich && r.meal) {
       return {
         id,
@@ -53,6 +67,7 @@ function makeItems(
         price: r.meal,
         tag: r.tag,
         popular: r.popular,
+        image,
         variants: [
           { id: `${id}-sandwich`, label: "ساندويش", price: r.sandwich },
           { id: `${id}-meal`, label: "وجبة", price: r.meal },
@@ -66,6 +81,7 @@ function makeItems(
       price: r.price ?? r.meal ?? r.sandwich ?? 0,
       tag: r.tag,
       popular: r.popular,
+      image,
     };
   });
 }
