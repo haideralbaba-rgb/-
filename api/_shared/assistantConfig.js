@@ -17,10 +17,11 @@ export const SYSTEM_PROMPT = `أنت "أبو علي"، مساعد الطلبات
 {"reply":"رد عراقي قصير","actions":[]}
 الأنواع: add_to_cart, remove_from_cart, set_quantity, clear_cart, open_cart, checkout.`;
 
-// Stable/high-throughput models first. A temporary 429 on one model must never block ordering.
+// Current stable models. Explicit ordering is handled locally before this path,
+// so temporary model capacity/quota never prevents a customer from ordering.
 const MODELS = [
-  process.env.GEMINI_PRIMARY_MODEL || "gemini-2.5-flash",
-  process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash-lite",
+  process.env.GEMINI_PRIMARY_MODEL || "gemini-3.5-flash-lite",
+  process.env.GEMINI_FALLBACK_MODEL || "gemini-3.6-flash",
   "gemini-3.7-flash",
 ];
 
@@ -41,7 +42,7 @@ async function requestModel(model, contents, apiKey) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 9000);
+    const timeout = setTimeout(() => controller.abort(), 6500);
     const res = await fetch(`${endpoint}?key=${apiKey}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -49,7 +50,7 @@ async function requestModel(model, contents, apiKey) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents,
-        generationConfig: { maxOutputTokens: 600, responseMimeType: "application/json", temperature: 0.25 },
+        generationConfig: { maxOutputTokens: 500, responseMimeType: "application/json", temperature: 0.25 },
       }),
     });
     clearTimeout(timeout);
@@ -73,7 +74,6 @@ export async function callGemini(history, cart = [], menu = []) {
 
   let lastError = null;
   for (const model of [...new Set(MODELS)]) {
-    // A transient capacity error is not fatal: immediately move to the next provider/model.
     const result = await requestModel(model, contents, apiKey);
     if (!result.ok) {
       lastError = result;
@@ -90,5 +90,5 @@ export async function callGemini(history, cart = [], menu = []) {
     return { text: parsed.reply.trim(), actions, model };
   }
 
-  return { error: "خدمة المساعد مشغولة حالياً. السلة محفوظة، وتكدر تعيد الإرسال بدون ما يضيع طلبك.", status: lastError?.status || 503 };
+  return { error: "خدمة المساعد مشغولة مؤقتاً. تگدر تكمل الطلب من السلة، وما راح يضيع شي.", status: lastError?.status || 503 };
 }
