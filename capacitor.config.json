@@ -1,0 +1,10 @@
+{
+  "appId": "com.voxa.maallimshawarma",
+  "appName": "معلم الشاورما",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "backgroundColor": "#090807"
+}
