@@ -26,18 +26,37 @@ interface CartContextValue {
 }
 
 const STORAGE_KEY = "ms_cart";
+const MAX_ITEM_QUANTITY = 99;
+
+function sanitizeCart(value: unknown): CartItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is CartItem => !!item && typeof item === "object")
+    .map((item) => ({
+      id: String(item.id || ""),
+      name: String(item.name || ""),
+      price: Number.isFinite(Number(item.price)) ? Math.max(0, Number(item.price)) : 0,
+      quantity: Math.min(MAX_ITEM_QUANTITY, Math.max(1, Math.floor(Number(item.quantity) || 1))),
+      variant: item.variant ? String(item.variant) : undefined,
+      image: item.image ? String(item.image) : undefined,
+    }))
+    .filter((item) => item.id && item.name);
+}
 
 function loadCart(): CartItem[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    return sanitizeCart(JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"));
   } catch {
     return [];
   }
 }
 
 function saveCart(items: CartItem[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // Private browsing / storage quota should never break ordering.
+  }
 }
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
@@ -51,12 +70,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   useEffect(() => saveCart(items), [items]);
 
   const addItem = useCallback((item: Omit<CartItem, "quantity">, quantity = 1) => {
-    const safeQuantity = Math.max(1, Math.floor(quantity));
+    const safeQuantity = Math.min(MAX_ITEM_QUANTITY, Math.max(1, Math.floor(quantity || 1)));
     setItems((prev) => {
       const existing = prev.find((i) => i.id === item.id);
       if (existing) {
         return prev.map((i) =>
-          i.id === item.id ? { ...i, quantity: i.quantity + safeQuantity } : i
+          i.id === item.id
+            ? { ...i, quantity: Math.min(MAX_ITEM_QUANTITY, i.quantity + safeQuantity) }
+            : i,
         );
       }
       return [...prev, { ...item, quantity: safeQuantity }];
@@ -67,20 +88,18 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const removeItem = useCallback((id: string) => setItems((prev) => prev.filter((i) => i.id !== id)), []);
 
-  const updateQuantity = useCallback(
-    (id: string, quantity: number) => {
-      if (quantity <= 0) {
-        removeItem(id);
-        return;
-      }
-      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity: Math.floor(quantity) } : i)));
-    },
-    [removeItem]
-  );
+  const updateQuantity = useCallback((id: string, quantity: number) => {
+    const safeQuantity = Math.min(MAX_ITEM_QUANTITY, Math.floor(Number(quantity) || 0));
+    if (safeQuantity <= 0) {
+      removeItem(id);
+      return;
+    }
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity: safeQuantity } : i)));
+  }, [removeItem]);
 
   const clearCart = useCallback(() => {
     setItems([]);
-    localStorage.removeItem(STORAGE_KEY);
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }, []);
 
   const openCart = useCallback(() => setIsCartOpen(true), []);
@@ -90,23 +109,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const totalItems = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
 
   return (
-    <CartContext.Provider
-      value={{
-        items,
-        isCartOpen,
-        addItem,
-        removeItem,
-        updateQuantity,
-        clearCart,
-        openCart,
-        closeCart,
-        totalPrice,
-        totalItems,
-        lastAddedId,
-        showCheckout,
-        setShowCheckout,
-      }}
-    >
+    <CartContext.Provider value={{ items, isCartOpen, addItem, removeItem, updateQuantity, clearCart, openCart, closeCart, totalPrice, totalItems, lastAddedId, showCheckout, setShowCheckout }}>
       {children}
     </CartContext.Provider>
   );
