@@ -15,7 +15,6 @@ import Footer from "./components/Footer";
 import CartBar from "./components/CartBar";
 import OrderDrawer from "./components/OrderDrawer";
 import AuthModal from "./components/AuthModal";
-import ChatWidget from "./components/ChatWidget";
 import RestaurantDashboard from "./components/RestaurantDashboard";
 import OrderHistory from "./components/OrderHistory";
 
@@ -47,7 +46,6 @@ export default function App() {
             <CartBar />
             <OrderDrawer />
             <AuthModal />
-            <ChatWidget />
           </div>
         </OrderProvider>
       )}
