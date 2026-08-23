@@ -17,6 +17,7 @@ import OrderDrawer from "./components/OrderDrawer";
 import AuthModal from "./components/AuthModal";
 import ChatWidget from "./components/ChatWidget";
 import RestaurantDashboard from "./components/RestaurantDashboard";
+import OrderHistory from "./components/OrderHistory";
 
 export default function App() {
   const isDashboard = window.location.pathname.replace(/\/$/, "") === "/dashboard";
@@ -39,6 +40,7 @@ export default function App() {
               <SocialProof />
               <Gallery />
               <LocationSection />
+              <OrderHistory />
               <CTASection />
             </main>
             <Footer />
