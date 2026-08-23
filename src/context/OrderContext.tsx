@@ -12,7 +12,7 @@ export interface CartItem {
 interface CartContextValue {
   items: CartItem[];
   isCartOpen: boolean;
-  addItem: (item: Omit<CartItem, "quantity">) => void;
+  addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
@@ -48,17 +48,18 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   const [lastAddedId, setLastAddedId] = useState<string | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
 
-  useEffect(() => {
-    saveCart(items);
-  }, [items]);
+  useEffect(() => saveCart(items), [items]);
 
-  const addItem = useCallback((item: Omit<CartItem, "quantity">) => {
+  const addItem = useCallback((item: Omit<CartItem, "quantity">, quantity = 1) => {
+    const safeQuantity = Math.max(1, Math.floor(quantity));
     setItems((prev) => {
       const existing = prev.find((i) => i.id === item.id);
       if (existing) {
-        return prev.map((i) => (i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i));
+        return prev.map((i) =>
+          i.id === item.id ? { ...i, quantity: i.quantity + safeQuantity } : i
+        );
       }
-      return [...prev, { ...item, quantity: 1 }];
+      return [...prev, { ...item, quantity: safeQuantity }];
     });
     setLastAddedId(item.id);
     window.setTimeout(() => setLastAddedId((cur) => (cur === item.id ? null : cur)), 900);
@@ -72,7 +73,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         removeItem(id);
         return;
       }
-      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity } : i)));
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity: Math.floor(quantity) } : i)));
     },
     [removeItem]
   );
