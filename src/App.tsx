@@ -16,32 +16,39 @@ import CartBar from "./components/CartBar";
 import OrderDrawer from "./components/OrderDrawer";
 import AuthModal from "./components/AuthModal";
 import ChatWidget from "./components/ChatWidget";
+import RestaurantDashboard from "./components/RestaurantDashboard";
 
 export default function App() {
+  const isDashboard = window.location.pathname.replace(/\/$/, "") === "/dashboard";
+
   return (
     <AuthProvider>
-      <OrderProvider>
-        <div className="relative min-h-screen bg-bg text-ivory selection:bg-gold selection:text-bg">
-          <Header />
-          <main>
-            <Hero />
-            <BrandStatement />
-            <FeaturedDishes />
-            <CraftSection />
-            <Story />
-            <MenuSection />
-            <SocialProof />
-            <Gallery />
-            <LocationSection />
-            <CTASection />
-          </main>
-          <Footer />
-          <CartBar />
-          <OrderDrawer />
-          <AuthModal />
-          <ChatWidget />
-        </div>
-      </OrderProvider>
+      {isDashboard ? (
+        <RestaurantDashboard />
+      ) : (
+        <OrderProvider>
+          <div className="relative min-h-screen bg-bg text-ivory selection:bg-gold selection:text-bg">
+            <Header />
+            <main>
+              <Hero />
+              <BrandStatement />
+              <FeaturedDishes />
+              <CraftSection />
+              <Story />
+              <MenuSection />
+              <SocialProof />
+              <Gallery />
+              <LocationSection />
+              <CTASection />
+            </main>
+            <Footer />
+            <CartBar />
+            <OrderDrawer />
+            <AuthModal />
+            <ChatWidget />
+          </div>
+        </OrderProvider>
+      )}
     </AuthProvider>
   );
 }
