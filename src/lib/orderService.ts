@@ -76,3 +76,33 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return { success: false, error: "حدث خطأ غير متوقع" };
   }
 }
+
+const CANCELLABLE_STATUSES = new Set(["pending", "confirmed"]);
+
+export async function cancelOrder(orderId: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabaseConfigured) return { success: false, error: "النظام غير مُهيّأ حالياً" };
+
+  const { data: order, error: readError } = await supabase
+    .from("orders")
+    .select("id,status")
+    .eq("id", orderId)
+    .single();
+
+  if (readError || !order) return { success: false, error: "ما لقينا الطلب" };
+  if (!CANCELLABLE_STATUSES.has(order.status)) {
+    return { success: false, error: "الطلب دخل التحضير وما عاد نكدر نلغيه من الموقع" };
+  }
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: "cancelled" })
+    .eq("id", orderId)
+    .in("status", ["pending", "confirmed"]);
+
+  if (error) {
+    console.error("Cancel order error:", error);
+    return { success: false, error: "ما گدرنا نلغي الطلب، حاول مرة ثانية" };
+  }
+
+  return { success: true };
+}
