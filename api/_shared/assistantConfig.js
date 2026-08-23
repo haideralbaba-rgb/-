@@ -33,7 +33,7 @@ export const SYSTEM_PROMPT = `أنت "أبو علي"، مساعد الطلبات
 الأنواع المسموحة: add_to_cart, remove_from_cart, set_quantity, clear_cart, open_cart, checkout.
 كل action يجب أن يكون قابلاً للتنفيذ. لا تضف أي markdown أو شرح خارج JSON.`;
 
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODEL = "gemini-3.7-flash";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 function cleanJson(text) {
@@ -80,9 +80,8 @@ export async function callGemini(history, cart = [], menu = []) {
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents,
         generationConfig: {
-          maxOutputTokens: 500,
+          maxOutputTokens: 600,
           responseMimeType: "application/json",
-          temperature: 0.2,
         },
       }),
     });
