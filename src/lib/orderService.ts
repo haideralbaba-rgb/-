@@ -24,25 +24,14 @@ export interface CreateOrderResult {
   error?: string;
 }
 
-export async function createOrder(
-  input: CreateOrderInput
-): Promise<CreateOrderResult> {
-  if (!supabaseConfigured) {
-    return {
-      success: false,
-      error: "النظام غير مُهيّأ حالياً",
-    };
-  }
+export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
+  if (!supabaseConfigured) return { success: false, error: "النظام غير مُهيّأ حالياً" };
 
   try {
-    // ============================================================
-    // 1. إنشاء الطلب
-    // ============================================================
-
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert({
-        customer_id: input.customerId,
+        user_id: input.customerId,
         subtotal: input.subtotal,
         delivery_fee: input.deliveryFee,
         total: input.total,
@@ -61,21 +50,10 @@ export async function createOrder(
 
     if (orderError || !order) {
       console.error("Create order error:", orderError);
-
-      return {
-        success: false,
-        error:
-          orderError?.message ||
-          "ما گدرنا ننشئ الطلب",
-      };
+      return { success: false, error: orderError?.message || "ما گدرنا ننشئ الطلب" };
     }
 
     const typedOrder = order as Order;
-
-    // ============================================================
-    // 2. تجهيز تفاصيل المنتجات
-    // ============================================================
-
     const orderItems = input.items.map((item) => ({
       order_id: typedOrder.id,
       product_id: item.id,
@@ -85,44 +63,16 @@ export async function createOrder(
       total: item.price * item.quantity,
     }));
 
-    // ============================================================
-    // 3. حفظ تفاصيل الطلب
-    // ============================================================
-
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(orderItems as never);
-
+    const { error: itemsError } = await supabase.from("order_items").insert(orderItems as never);
     if (itemsError) {
       console.error("Create order items error:", itemsError);
-
-      // حذف الطلب الأساسي إذا فشل حفظ التفاصيل
-      await supabase
-        .from("orders")
-        .delete()
-        .eq("id", typedOrder.id);
-
-      return {
-        success: false,
-        error: "ما گدرنا نحفظ تفاصيل الطلب",
-      };
+      await supabase.from("orders").delete().eq("id", typedOrder.id);
+      return { success: false, error: "ما گدرنا نحفظ تفاصيل الطلب" };
     }
 
-    // ============================================================
-    // 4. نجاح الطلب
-    // ============================================================
-
-    return {
-      success: true,
-      order: typedOrder,
-      orderNumber: typedOrder.order_number,
-    };
+    return { success: true, order: typedOrder, orderNumber: typedOrder.order_number };
   } catch (error) {
     console.error("Unexpected order error:", error);
-
-    return {
-      success: false,
-      error: "حدث خطأ غير متوقع",
-    };
+    return { success: false, error: "حدث خطأ غير متوقع" };
   }
 }
